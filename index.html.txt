@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的雲端點餐系統</title>
+    <style>
+        /* CSS：負責美化介面 */
+        :root { --p: #e67e22; --s: #27ae60; --bg: #f8f9fa; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg); margin: 0; padding-bottom: 50px; }
+        header { background: white; text-align: center; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100; }
+        .filter-bar { margin-top: 15px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        .filter-bar button { padding: 8px 15px; border: 1px solid var(--p); background: transparent; color: var(--p); border-radius: 20px; cursor: pointer; }
+        .filter-bar button:hover { background: var(--p); color: white; }
+        .main-content { display: flex; max-width: 1000px; margin: 20px auto; gap: 20px; padding: 0 15px; flex-wrap: wrap; }
+        .menu-grid { flex: 2; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+        .menu-card { background: white; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .menu-card h4 { margin: 10px 0 5px; }
+        .menu-card .price { color: var(--p); font-weight: bold; display: block; margin-bottom: 10px; }
+        .menu-card button { width: 100%; background: var(--s); color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; }
+        .cart-sidebar { flex: 1; background: white; padding: 20px; border-radius: 12px; height: fit-content; min-width: 280px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .qty-btn { border: 1px solid #ddd; background: white; width: 25px; cursor: pointer; border-radius: 3px; }
+        .cart-footer { margin-top: 20px; border-top: 2px solid #eee; padding-top: 10px; }
+        #checkout-btn { width: 100%; padding: 12px; background: var(--p); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        /* 彈出視窗 */
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; z-index:1000; }
+        .modal-content { background:white; padding:30px; border-radius:15px; text-align:center; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>美味雲端點餐</h1>
+    <div class="filter-bar">
+        <button onclick="renderMenu('全部')">全部</button>
+        <button onclick="renderMenu('主餐')">主餐</button>
+        <button onclick="renderMenu('麵食')">麵食</button>
+        <button onclick="renderMenu('飲料')">飲料</button>
+    </div>
+</header>
+
+<main class="main-content">
+    <div id="menu-cards" class="menu-grid"></div>
+    <aside class="cart-sidebar">
+        <h3>🛒 購物車</h3>
+        <div id="cart-list"></div>
+        <div class="cart-footer">
+            <h3 id="total-price">總金額：$0</h3>
+            <button id="checkout-btn">送出訂單</button>
+        </div>
+    </aside>
+</main>
+
+<div id="msg-modal" class="modal">
+    <div class="modal-content">
+        <h2 id="modal-text">訂單處理中...</h2>
+        <button onclick="closeModal()" id="close-m-btn" style="display:none; padding:8px 20px;">完成</button>
+    </div>
+</div>
+
+<script>
+    // 資料：餐點內容
+    const products = [
+        { id: 1, name: '滷肉飯', price: 45, cat: '主餐' },
+        { id: 2, name: '雞腿飯', price: 110, cat: '主餐' },
+        { id: 3, name: '牛肉麵', price: 150, cat: '麵食' },
+        { id: 4, name: '乾拌麵', price: 60, cat: '麵食' },
+        { id: 5, name: '紅茶', price: 30, cat: '飲料' },
+        { id: 6, name: '奶茶', price: 40, cat: '飲料' }
+    ];
+
+    // 從記憶體讀取購物車
+    let cart = JSON.parse(localStorage.getItem('myOrder')) || [];
+
+    function renderMenu(filter = '全部') {
+        const grid = document.getElementById('menu-cards');
+        grid.innerHTML = '';
+        products.filter(p => filter === '全部' || p.cat === filter).forEach(p => {
+            grid.innerHTML += `
+                <div class="menu-card">
+                    <small>${p.cat}</small>
+                    <h4>${p.name}</h4>
+                    <span class="price">$${p.price}</span>
+                    <button onclick="addToCart(${p.id})">加入</button>
+                </div>`;
+        });
+    }
+
+    function addToCart(id) {
+        const item = products.find(p => p.id === id);
+        const inCart = cart.find(c => c.id === id);
+        if (inCart) inCart.qty++; else cart.push({ ...item, qty: 1 });
+        update();
+    }
+
+    function changeQty(id, n) {
+        const inCart = cart.find(c => c.id === id);
+        if (inCart) {
+            inCart.qty += n;
+            if (inCart.qty <= 0) cart = cart.filter(c => c.id !== id);
+        }
+        update();
+    }
+
+    function update() {
+        localStorage.setItem('myOrder', JSON.stringify(cart));
+        const list = document.getElementById('cart-list');
+        list.innerHTML = cart.length ? '' : '<p>尚未點餐</p>';
+        let total = 0;
+        cart.forEach(c => {
+            total += c.price * c.qty;
+            list.innerHTML += `
+                <div class="cart-item">
+                    <span>${c.name}</span>
+                    <div>
+                        <button class="qty-btn" onclick="changeQty(${c.id}, -1)">-</button>
+                        <span>${c.qty}</span>
+                        <button class="qty-btn" onclick="changeQty(${c.id}, 1)">+</button>
+                    </div>
+                </div>`;
+        });
+        document.getElementById('total-price').innerText = `總金額：$${total}`;
+    }
+
+    document.getElementById('checkout-btn').onclick = () => {
+        if (!cart.length) return alert('請先選購餐點！');
+        document.getElementById('msg-modal').style.display = 'flex';
+        setTimeout(() => {
+            document.getElementById('modal-text').innerText = '✅ 訂單成功送達！';
+            document.getElementById('close-m-btn').style.display = 'inline-block';
+            cart = []; update();
+        }, 1500);
+    };
+
+    function closeModal() {
+        document.getElementById('msg-modal').style.display = 'none';
+        document.getElementById('modal-text').innerText = '訂單處理中...';
+        document.getElementById('close-m-btn').style.display = 'none';
+    }
+
+    renderMenu();
+    update();
+</script>
+</body>
+</html>
